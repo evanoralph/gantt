@@ -79,12 +79,21 @@ $handle-color: #ddd !default;
 		}
 	}
 
-	.handle {
+	.handle{
 		fill: $handle-color;
 		cursor: ew-resize;
 		opacity: 0;
 		visibility: hidden;
 		transition: opacity .3s ease;
+	}
+
+	.bar-pan {
+		cursor: move;
+		fill: #3c459e;
+		fill-opacity: 0;
+		&:hover {
+			fill-opacity: 1;
+		}
 	}
 
 	.bar-wrapper {
@@ -138,6 +147,22 @@ $handle-color: #ddd !default;
 	overflow: auto;
 	font-size: 12px;
 
+	.gantt-group{
+		position: fixed;
+		width: 300px;
+		background: white;
+	}
+
+	.gantt-wrapper{
+		width: 70%;
+		float: left;
+		overflow: scroll;
+	}
+
+	.row-line{
+		stroke: #cecece
+	}
+
 	.popup-wrapper {
 		position: absolute;
 		top: 0;
@@ -165,4 +190,8 @@ $handle-color: #ddd !default;
 			border-top-color: rgba(0, 0, 0, 0.8);
 		}
 	}
+}
+
+.gantt .group_name {
+	font-weight: bold;
 }

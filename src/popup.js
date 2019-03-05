@@ -1,3 +1,5 @@
+import { GROUP_TAB_WIDTH } from './constant';
+
 export default class Popup {
     constructor(parent, custom_html) {
         this.parent = parent;
@@ -49,8 +51,7 @@ export default class Popup {
         }
 
         if (options.position === 'left') {
-            this.parent.style.left =
-                position_meta.x + (position_meta.width + 10) + 'px';
+            this.parent.style.left = position_meta.x + (position_meta.width + 10) + 'px';
             this.parent.style.top = position_meta.y + 'px';
 
             this.pointer.style.transform = 'rotateZ(90deg)';
@@ -60,9 +61,11 @@ export default class Popup {
 
         // show
         this.parent.style.opacity = 1;
+        this.parent.style.zIndex = 9999;
     }
 
     hide() {
         this.parent.style.opacity = 0;
+        this.parent.style.zIndex = -9999;
     }
 }
