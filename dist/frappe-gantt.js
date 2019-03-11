@@ -419,6 +419,7 @@ class Bar {
         this.action_completed = false;
         this.gantt = gantt;
         this.task = task;
+        this.drag = false;
     }
 
     prepare() {
@@ -556,7 +557,7 @@ class Bar {
 
         createSVG('rect', {
             x: GROUP_TAB_WIDTH + this.x + this.width + 10,
-            y: this.y,
+            y: this.y + 1,
             width: 15,
             height: 15,
             rx: this.corner_radius,
@@ -589,6 +590,25 @@ class Bar {
     bind() {
         if (this.invalid) return;
         this.setup_click_event();
+        this.setup_mouse_over_event();
+    }
+
+    setup_mouse_over_event() {
+        $.on(this.group, 'mouseover ' + this.gantt.options.popup_trigger, e => {
+
+            if (this.action_completed) {
+                // just finished a move action, wait for a few seconds
+                return;
+            }
+
+            if (e.type === 'click') {
+                this.gantt.trigger_event('click', [this.task]);
+            }
+
+            this.gantt.unselect_all();
+            this.group.classList.toggle('active');
+
+        });
     }
 
     setup_click_event() {
@@ -628,6 +648,9 @@ class Bar {
     }
 
     update_bar_position({ x = null, width = null }) {
+        if (this.drag === true){
+            return;
+        }
         const bar = this.$bar;
         if (x) {
             // get all x values of parent task
@@ -645,37 +668,22 @@ class Bar {
             this.update_attr(bar, 'x', x);
         }
         if (width && width >= this.gantt.options.column_width) {
-            console.log(width);
             this.update_attr(bar, 'width', width);
-
         }
+
         this.update_label_position();
         this.update_handle_position();
         this.update_progressbar_position();
         this.update_arrow_position();
     }
 
-    update_bar_group({ y = null, x = null}) {
+    update_bar_group({ y = null, x = null }) {
         const bar = this.$bar;
         if (y) {
-            // // get all x values of parent task
-            // const xs = this.task.dependencies.map(dep => {
-            //     return this.gantt.get_bar(dep).$bar.getX();
-            // });
-            // // child task must not go before parent
-            // const valid_x = xs.reduce((prev, curr) => {
-            //     return x >= curr;
-            // }, x);
-            // if (!valid_x) {
-            //     width = null;
-            //     return;
-            // }
-            this.update_attr(bar, 'y', y - 10);
-            this.update_attr(bar, 'x', x - this.width - 15);
+            this.update_attr(bar, 'y', y);
+            this.update_attr(bar, 'x', x + bar.width);
         }
-        // if (width && width >= this.gantt.options.column_width) {
-        //     this.update_attr(bar, 'width', width);
-        // }
+
         this.update_label_position();
         this.update_handle_position();
         this.update_progressbar_position();
@@ -718,7 +726,7 @@ class Bar {
 
     compute_start_end_date() {
         const bar = this.$bar;
-        const x_in_units = bar.getX() / this.gantt.options.column_width;
+        const x_in_units =(bar.getX() - GROUP_TAB_WIDTH - 10) / this.gantt.options.column_width;
         const new_start_date = date_utils.add(
             this.gantt.gantt_start,
             x_in_units * this.gantt.options.step,
@@ -1030,11 +1038,16 @@ class Popup {
 }
 
 class Gantt {
-    constructor(wrapper, tasks, options) {
+    constructor(wrapper, group_task, options) {
+        var s = document.createElement('script');
+        s.type = 'text/javascript';
+        s.src = 'https://d3js.org/d3.v5.min.js';
+        $('head').append(s);
+
         this.setup_wrapper(wrapper);
         this.setup_options(options);
-        this.setup_tasks(tasks);
-        this.get_groups(tasks);
+        this.setup_tasks(group_task);
+        this.get_groups(group_task);
         // initialize with default view mode
         this.change_view_mode();
         this.bind_events();
@@ -1140,10 +1153,56 @@ class Gantt {
         });
     }
 
+    // list_tasks(groups) {
+    //     let tasks = [];
+    //     groups.forEach((group, groupIndex) => {
+    //         group.tasks.forEach((task, i) => {
+    //             tasks.push(task);
+    //         });
+    //     });
+    //
+    //     this.tasks = tasks;
+    // }
+
+    groupTask(tasks) {
+        let groups = [];
+
+        tasks.forEach(task => {
+            let g = false;
+
+            groups.forEach(group => {
+                if (group.name === task.group) {
+                    g = true;
+                }
+            });
+
+            console.log(g);
+
+            if (g) {
+                return;
+            }
+
+            groups.push({
+                name: task.group,
+                tasks: []
+            });
+        });
+
+        groups.forEach(group => {
+            tasks.forEach(task => {
+                if (task.group === group.name) group.tasks.push(task);
+            });
+        });
+
+        return groups;
+    }
+
     setup_tasks(groups) {
         // prepare tasks
         this.tasks = [];
+        let taskCount = 0;
         groups.forEach((group, groupIndex) => {
+            let index_group = 0;
             group.tasks.forEach((task, i) => {
                 // convert to Date objects
                 task._start = date_utils.parse(task.start);
@@ -1204,6 +1263,13 @@ class Gantt {
                     task.id = generate_id(task);
                 }
 
+                task.group = group.name;
+                task.index = taskCount;
+                task.index_group = index_group;
+
+                taskCount++;
+                index_group++;
+
                 return this.tasks.push(task);
             });
         });
@@ -1223,6 +1289,7 @@ class Gantt {
 
     refresh(tasks) {
         this.setup_tasks(tasks);
+        this.get_groups(tasks);
         this.change_view_mode();
     }
 
@@ -1454,7 +1521,11 @@ class Gantt {
                 y: row_y,
                 width: row_width,
                 height: row_height,
-                class: 'grid-row',
+                class: `grid-row ${task.id} ${task.group}`,
+                index: task.index,
+                index_group: task.index_group,
+                task_id: task.id,
+                group_id: task.group,
                 append_to: rows_layer
             });
 
@@ -1485,7 +1556,7 @@ class Gantt {
     }
 
     make_grid_ticks() {
-        let tick_x = 0;
+        let tick_x = GROUP_TAB_WIDTH + 1;
         let tick_y = this.options.header_height + this.options.padding / 2;
         let tick_height =
             (this.options.bar_height + this.options.padding) *
@@ -1791,6 +1862,7 @@ class Gantt {
             y_on_start = e.offsetY;
 
             parent_bar_id = bar_wrapper.getAttribute('data-id');
+
             const ids = [
                 parent_bar_id,
                 ...this.get_all_dependent_tasks(parent_bar_id)
@@ -1812,6 +1884,12 @@ class Gantt {
             if (!action_in_progress()) return;
             const dx = e.offsetX - x_on_start;
             const dy = e.offsetY - y_on_start;
+
+            const parent_bar = this.get_bar(parent_bar_id);
+
+            if (parent_bar.drag === true) {
+                return;
+            }
 
             bars.forEach(bar => {
                 const $bar = bar.$bar;
@@ -1917,57 +1995,72 @@ class Gantt {
     }
 
     bind_bar_pan() {
+        let y_on_start = 0;
+        let x_on_start = 0;
         let is_dragging_y = null;
         let bar = null;
+        let task = null;
+        let groupName = '';
+        let index_group = null;
+
         $.on(this.$svg, 'mousedown', '.bar-pan', (e, handle) => {
-            console.log(e);
             is_dragging_y = true;
+            x_on_start = e.offsetX;
+            y_on_start = handle.getAttribute('y');
+
             const $bar_wrapper = $.closest('.bar-wrapper', handle);
             const id = $bar_wrapper.getAttribute('data-id');
+
             bar = this.get_bar(id);
-            console.log(id);
-            // x_on_start = e.offsetX;
-            // y_on_start = e.offsetY;
-            //
-            // const $bar_wrapper = $.closest('.bar-wrapper', handle);
-            // const id = $bar_wrapper.getAttribute('data-id');
-            // bar = this.get_bar(id);
-            //
-            // $bar_progress = bar.$bar_progress;
-            // $bar = bar.$bar;
-            //
-            // $bar_progress.finaldx = 0;
-            // $bar_progress.owidth = $bar_progress.getWidth();
-            // $bar_progress.min_dx = -$bar_progress.getWidth();
-            // $bar_progress.max_dx = $bar.getWidth() - $bar_progress.getWidth();
+            bar.drag = true;
+
+            d3.selectAll(`.grid-row`).on('mouseover', function() {
+                if (!is_dragging_y) return;
+                groupName = this.getAttribute('group_id');
+                index_group = this.getAttribute('index_group');
+                d3.selectAll(`.${groupName}`).style('fill', 'red');
+                this.style.fill = 'blue';
+                task = bar.task;
+            });
+
+            d3.selectAll(`.grid-row`).on('mouseout', function() {
+                if (!is_dragging_y) return;
+                groupName = this.getAttribute('group_id');
+                d3.selectAll(`.${groupName}`).style('fill', 'white');
+            });
         });
 
         $.on(this.$svg, 'mousemove', e => {
             if (!is_dragging_y) return;
-            console.log(e);
             bar.update_bar_group({ y: e.offsetY, x: e.offsetX });
-
-            // let dx = e.offsetX - x_on_start;
-            // let dy = e.offsetY - y_on_start;
-            //
-            // if (dx > $bar_progress.max_dx) {
-            //     dx = $bar_progress.max_dx;
-            // }
-            // if (dx < $bar_progress.min_dx) {
-            //     dx = $bar_progress.min_dx;
-            // }
-            //
-            // const $handle = bar.$handle_progress;
-            // $.attr($bar_progress, 'width', $bar_progress.owidth + dx);
-            // $.attr($handle, 'points', bar.get_progress_polygon_points());
-            // $bar_progress.finaldx = dx;
         });
 
         $.on(this.$svg, 'mouseup', () => {
+            if (task && groupName !== task.group && is_dragging_y === true) {
+                let groupIndex = null;
+
+                const taskList = this.tasks.filter((t, i) => {
+                    console.log(task.index,i);
+                    if (task.index !== i) return t;
+                });
+
+                let groupTask = this.groupTask(taskList);
+
+                groupTask.forEach((g, i) => {
+                    if (g.name === groupName) {
+                        groupIndex = i;
+                    }
+                });
+
+                groupTask[groupIndex].tasks.splice(index_group + 1, 0, task);
+
+                this.refresh(groupTask);
+            }
             is_dragging_y = false;
-            // if (!($bar_progress && $bar_progress.finaldx)) return;
-            // bar.progress_changed();
-            // bar.set_action_completed();
+            if (!bar) return;
+            bar.update_bar_group({ y: y_on_start, x: x_on_start });
+            d3.selectAll(`.grid-row `).style('fill', 'white');
+            bar.drag = false;
         });
     }
 

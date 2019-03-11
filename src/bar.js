@@ -14,6 +14,7 @@ export default class Bar {
         this.action_completed = false;
         this.gantt = gantt;
         this.task = task;
+        this.drag = false;
     }
 
     prepare() {
@@ -151,7 +152,7 @@ export default class Bar {
 
         createSVG('rect', {
             x: GROUP_TAB_WIDTH + this.x + this.width + 10,
-            y: this.y,
+            y: this.y + 1,
             width: 15,
             height: 15,
             rx: this.corner_radius,
@@ -184,6 +185,25 @@ export default class Bar {
     bind() {
         if (this.invalid) return;
         this.setup_click_event();
+        this.setup_mouse_over_event();
+    }
+
+    setup_mouse_over_event() {
+        $.on(this.group, 'mouseover ' + this.gantt.options.popup_trigger, e => {
+
+            if (this.action_completed) {
+                // just finished a move action, wait for a few seconds
+                return;
+            }
+
+            if (e.type === 'click') {
+                this.gantt.trigger_event('click', [this.task]);
+            }
+
+            this.gantt.unselect_all();
+            this.group.classList.toggle('active');
+
+        });
     }
 
     setup_click_event() {
@@ -223,6 +243,9 @@ export default class Bar {
     }
 
     update_bar_position({ x = null, width = null }) {
+        if (this.drag === true){
+            return;
+        }
         const bar = this.$bar;
         if (x) {
             // get all x values of parent task
@@ -240,37 +263,22 @@ export default class Bar {
             this.update_attr(bar, 'x', x);
         }
         if (width && width >= this.gantt.options.column_width) {
-            console.log(width);
             this.update_attr(bar, 'width', width);
-
         }
+
         this.update_label_position();
         this.update_handle_position();
         this.update_progressbar_position();
         this.update_arrow_position();
     }
 
-    update_bar_group({ y = null, x = null}) {
+    update_bar_group({ y = null, x = null }) {
         const bar = this.$bar;
         if (y) {
-            // // get all x values of parent task
-            // const xs = this.task.dependencies.map(dep => {
-            //     return this.gantt.get_bar(dep).$bar.getX();
-            // });
-            // // child task must not go before parent
-            // const valid_x = xs.reduce((prev, curr) => {
-            //     return x >= curr;
-            // }, x);
-            // if (!valid_x) {
-            //     width = null;
-            //     return;
-            // }
-            this.update_attr(bar, 'y', y - 10);
-            this.update_attr(bar, 'x', x - this.width - 15);
+            this.update_attr(bar, 'y', y);
+            this.update_attr(bar, 'x', x + bar.width);
         }
-        // if (width && width >= this.gantt.options.column_width) {
-        //     this.update_attr(bar, 'width', width);
-        // }
+
         this.update_label_position();
         this.update_handle_position();
         this.update_progressbar_position();
@@ -313,7 +321,7 @@ export default class Bar {
 
     compute_start_end_date() {
         const bar = this.$bar;
-        const x_in_units = bar.getX() / this.gantt.options.column_width;
+        const x_in_units =(bar.getX() - GROUP_TAB_WIDTH - 10) / this.gantt.options.column_width;
         const new_start_date = date_utils.add(
             this.gantt.gantt_start,
             x_in_units * this.gantt.options.step,
