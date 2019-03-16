@@ -72,6 +72,13 @@
   .gantt .bar-pan:hover {
     fill-opacity: 1; }
 
+.gantt .bar-arrow-drag {
+  cursor: crosshair;
+  fill: #3c459e;
+  fill-opacity: 0; }
+  .gantt .bar-arrow-drag:hover {
+    fill-opacity: 1; }
+
 .gantt .bar-wrapper {
   cursor: pointer;
   outline: none; }
@@ -114,6 +121,9 @@
     overflow: scroll; }
   .gantt-container .row-line {
     stroke: #cecece; }
+  .gantt-container .arrow-line {
+    stroke: #cecece;
+    stroke-width: 2; }
   .gantt-container .popup-wrapper {
     position: absolute;
     top: 0;

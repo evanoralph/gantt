@@ -420,6 +420,7 @@ class Bar {
         this.gantt = gantt;
         this.task = task;
         this.drag = false;
+        this.disableDrag = false;
     }
 
     prepare() {
@@ -566,6 +567,27 @@ class Bar {
             append_to: this.handle_group
         });
 
+        createSVG('rect', {
+            x: GROUP_TAB_WIDTH + this.x - 15,
+            y: this.y + 5,
+            width: 10,
+            height: 10,
+            rx: 50,
+            ry: 50,
+            barId: this.task.id,
+            class: 'bar-arrow-drag',
+            append_to: this.handle_group
+        });
+
+        createSVG('line', {
+            y1: this.y + 10,
+            x1: GROUP_TAB_WIDTH + this.x - 10,
+            y2: this.y + 10,
+            x2: GROUP_TAB_WIDTH + this.x - 10,
+            class: 'arrow-line',
+            append_to: this.handle_group
+        });
+
         if (this.task.progress && this.task.progress < 100) {
             this.$handle_progress = createSVG('polygon', {
                 points: this.get_progress_polygon_points().join(','),
@@ -647,10 +669,19 @@ class Bar {
         });
     }
 
+    move_arrow({ x2 = null, y2 = null }) {
+        if (this.disableDrag === false) return;
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x2', x2);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y2', y2);
+    }
+
     update_bar_position({ x = null, width = null }) {
-        if (this.drag === true){
-            return;
-        }
+        if (this.disableDrag === true) return;
         const bar = this.$bar;
         if (x) {
             // get all x values of parent task
@@ -678,6 +709,8 @@ class Bar {
     }
 
     update_bar_group({ y = null, x = null }) {
+        if (this.disableDrag === true) return;
+
         const bar = this.$bar;
         if (y) {
             this.update_attr(bar, 'y', y);
@@ -858,6 +891,27 @@ class Bar {
         this.handle_group
             .querySelector('.bar-pan')
             .setAttribute('y', bar.getY());
+
+        this.handle_group
+            .querySelector('.bar-arrow-drag')
+            .setAttribute('x', bar.getX() - 15);
+        this.handle_group
+            .querySelector('.bar-arrow-drag')
+            .setAttribute('y', bar.getY() + 5);
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x1', bar.getX() - 10);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y1', bar.getY() + 5);
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x2', bar.getX() - 10);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y2', bar.getY() + 5);
 
         const handle = this.group.querySelector('.handle.progress');
         handle &&
@@ -1888,6 +1942,8 @@ class Gantt {
             const parent_bar = this.get_bar(parent_bar_id);
 
             if (parent_bar.drag === true) {
+                const b = this.get_bar(parent_bar_id);
+                b.update_bar_position({ x: e.offsetX - b.$bar.owidth - 15});
                 return;
             }
 
@@ -1940,6 +1996,59 @@ class Gantt {
 
         this.bind_bar_progress();
         this.bind_bar_pan();
+        this.bind_arrow_even();
+    }
+
+    bind_arrow_even() {
+        let x_on_start = 0;
+        let y_on_start = 0;
+        let onDrag = false;
+        let bar = null;
+        let id = null;
+
+        $.on(this.$svg, 'mousedown', '.bar-arrow-drag ', (e, handle) => {
+            onDrag = true;
+
+            y_on_start = handle.getAttribute('y');
+            x_on_start = handle.getAttribute('x');
+
+            const $bar_wrapper = $.closest('.bar-wrapper', handle);
+            id = $bar_wrapper.getAttribute('data-id');
+
+            bar = this.get_bar(id);
+            bar.disableDrag = true;
+            bar.drag = true;
+        });
+
+        $.on(this.$svg, 'mousemove', '.gantt', (e, handle) => {
+            if(onDrag === false) return;
+            bar.move_arrow({ x2: e.clientX - 170, y2: e.clientY - 70 });
+        });
+
+        $.on(this.$svg, 'mouseup', (e, handle) => {
+            if(onDrag === false) return;
+            const barId = e.target.getAttribute('barId');
+
+            if(barId){
+                const taskList = this.tasks.map(( task ) => {
+                    if (task.id === id && !task.dependencies.includes(barId)) {
+                        const barTarget = this.get_bar(barId);
+                        if(!barTarget.task.dependencies.includes(id)){
+                            task.dependencies.push(barId);
+                        }
+                    }
+                    return task;
+                });
+
+                let groupTask = this.groupTask(taskList);
+
+                this.refresh(groupTask);
+            }
+
+            bar.move_arrow({ x2: Number(x_on_start) + 5, y2: Number(y_on_start) + 5 });
+            bar.disableDrag = false;
+            bar.drag = false;
+        });
     }
 
     bind_bar_progress() {
@@ -2002,6 +2111,7 @@ class Gantt {
         let task = null;
         let groupName = '';
         let index_group = null;
+        let index = null;
 
         $.on(this.$svg, 'mousedown', '.bar-pan', (e, handle) => {
             is_dragging_y = true;
@@ -2018,6 +2128,7 @@ class Gantt {
                 if (!is_dragging_y) return;
                 groupName = this.getAttribute('group_id');
                 index_group = this.getAttribute('index_group');
+                index = this.getAttribute('index');
                 d3.selectAll(`.${groupName}`).style('fill', 'red');
                 this.style.fill = 'blue';
                 task = bar.task;
@@ -2036,11 +2147,10 @@ class Gantt {
         });
 
         $.on(this.$svg, 'mouseup', () => {
-            if (task && groupName !== task.group && is_dragging_y === true) {
+            if (task && is_dragging_y === true) {
                 let groupIndex = null;
 
                 const taskList = this.tasks.filter((t, i) => {
-                    console.log(task.index,i);
                     if (task.index !== i) return t;
                 });
 
@@ -2052,14 +2162,24 @@ class Gantt {
                     }
                 });
 
-                groupTask[groupIndex].tasks.splice(index_group + 1, 0, task);
+                groupTask[groupIndex].tasks.splice(index_group, 0, task);
 
                 this.refresh(groupTask);
             }
             is_dragging_y = false;
             if (!bar) return;
             bar.update_bar_group({ y: y_on_start, x: x_on_start });
-            d3.selectAll(`.grid-row `).style('fill', 'white');
+
+            d3
+                .selectAll(`.grid-row `)
+                .nodes()
+                .map(function(e) {
+                    const color =
+                        e.getAttribute('index') % 2 === 0 ? '#fff' : '#f5f5f5';
+                    e.style.fill = color;
+                    return e;
+                });
+
             bar.drag = false;
         });
     }

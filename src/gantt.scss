@@ -96,6 +96,15 @@ $handle-color: #ddd !default;
 		}
 	}
 
+	.bar-arrow-drag {
+		cursor: crosshair;
+		fill: #3c459e;
+		fill-opacity: 0;
+		&:hover {
+			fill-opacity: 1;
+		}
+	}
+
 	.bar-wrapper {
 		cursor: pointer;
 		outline: none;
@@ -161,6 +170,11 @@ $handle-color: #ddd !default;
 
 	.row-line{
 		stroke: #cecece
+	}
+
+	.arrow-line{
+		stroke: #cecece;
+		stroke-width: 2 ;
 	}
 
 	.popup-wrapper {

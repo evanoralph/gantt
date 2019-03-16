@@ -15,6 +15,7 @@ export default class Bar {
         this.gantt = gantt;
         this.task = task;
         this.drag = false;
+        this.disableDrag = false;
     }
 
     prepare() {
@@ -161,6 +162,27 @@ export default class Bar {
             append_to: this.handle_group
         });
 
+        createSVG('rect', {
+            x: GROUP_TAB_WIDTH + this.x - 15,
+            y: this.y + 5,
+            width: 10,
+            height: 10,
+            rx: 50,
+            ry: 50,
+            barId: this.task.id,
+            class: 'bar-arrow-drag',
+            append_to: this.handle_group
+        });
+
+        createSVG('line', {
+            y1: this.y + 10,
+            x1: GROUP_TAB_WIDTH + this.x - 10,
+            y2: this.y + 10,
+            x2: GROUP_TAB_WIDTH + this.x - 10,
+            class: 'arrow-line',
+            append_to: this.handle_group
+        });
+
         if (this.task.progress && this.task.progress < 100) {
             this.$handle_progress = createSVG('polygon', {
                 points: this.get_progress_polygon_points().join(','),
@@ -242,10 +264,19 @@ export default class Bar {
         });
     }
 
+    move_arrow({ x2 = null, y2 = null }) {
+        if (this.disableDrag === false) return;
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x2', x2);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y2', y2);
+    }
+
     update_bar_position({ x = null, width = null }) {
-        if (this.drag === true){
-            return;
-        }
+        if (this.disableDrag === true) return;
         const bar = this.$bar;
         if (x) {
             // get all x values of parent task
@@ -273,6 +304,8 @@ export default class Bar {
     }
 
     update_bar_group({ y = null, x = null }) {
+        if (this.disableDrag === true) return;
+
         const bar = this.$bar;
         if (y) {
             this.update_attr(bar, 'y', y);
@@ -453,6 +486,27 @@ export default class Bar {
         this.handle_group
             .querySelector('.bar-pan')
             .setAttribute('y', bar.getY());
+
+        this.handle_group
+            .querySelector('.bar-arrow-drag')
+            .setAttribute('x', bar.getX() - 15);
+        this.handle_group
+            .querySelector('.bar-arrow-drag')
+            .setAttribute('y', bar.getY() + 5);
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x1', bar.getX() - 10);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y1', bar.getY() + 5);
+
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('x2', bar.getX() - 10);
+        this.handle_group
+            .querySelector('.arrow-line')
+            .setAttribute('y2', bar.getY() + 5);
 
         const handle = this.group.querySelector('.handle.progress');
         handle &&

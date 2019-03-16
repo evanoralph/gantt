@@ -858,6 +858,8 @@ export default class Gantt {
             const parent_bar = this.get_bar(parent_bar_id);
 
             if (parent_bar.drag === true) {
+                const b = this.get_bar(parent_bar_id);
+                b.update_bar_position({ x: e.offsetX - b.$bar.owidth - 15});
                 return;
             }
 
@@ -910,6 +912,59 @@ export default class Gantt {
 
         this.bind_bar_progress();
         this.bind_bar_pan();
+        this.bind_arrow_even();
+    }
+
+    bind_arrow_even() {
+        let x_on_start = 0;
+        let y_on_start = 0;
+        let onDrag = false;
+        let bar = null;
+        let id = null;
+
+        $.on(this.$svg, 'mousedown', '.bar-arrow-drag ', (e, handle) => {
+            onDrag = true;
+
+            y_on_start = handle.getAttribute('y');
+            x_on_start = handle.getAttribute('x');
+
+            const $bar_wrapper = $.closest('.bar-wrapper', handle);
+            id = $bar_wrapper.getAttribute('data-id');
+
+            bar = this.get_bar(id);
+            bar.disableDrag = true;
+            bar.drag = true;
+        });
+
+        $.on(this.$svg, 'mousemove', '.gantt', (e, handle) => {
+            if(onDrag === false) return;
+            bar.move_arrow({ x2: e.clientX - 170, y2: e.clientY - 70 });;
+        });
+
+        $.on(this.$svg, 'mouseup', (e, handle) => {
+            if(onDrag === false) return;
+            const barId = e.target.getAttribute('barId');
+
+            if(barId){
+                const taskList = this.tasks.map(( task ) => {
+                    if (task.id === id && !task.dependencies.includes(barId)) {
+                        const barTarget = this.get_bar(barId);
+                        if(!barTarget.task.dependencies.includes(id)){
+                            task.dependencies.push(barId);
+                        }
+                    }
+                    return task;
+                });
+
+                let groupTask = this.groupTask(taskList);
+
+                this.refresh(groupTask);
+            }
+
+            bar.move_arrow({ x2: Number(x_on_start) + 5, y2: Number(y_on_start) + 5 });
+            bar.disableDrag = false;
+            bar.drag = false;
+        });
     }
 
     bind_bar_progress() {
@@ -972,6 +1027,7 @@ export default class Gantt {
         let task = null;
         let groupName = '';
         let index_group = null;
+        let index = null;
 
         $.on(this.$svg, 'mousedown', '.bar-pan', (e, handle) => {
             is_dragging_y = true;
@@ -988,6 +1044,7 @@ export default class Gantt {
                 if (!is_dragging_y) return;
                 groupName = this.getAttribute('group_id');
                 index_group = this.getAttribute('index_group');
+                index = this.getAttribute('index');
                 d3.selectAll(`.${groupName}`).style('fill', 'red');
                 this.style.fill = 'blue';
                 task = bar.task;
@@ -1006,11 +1063,10 @@ export default class Gantt {
         });
 
         $.on(this.$svg, 'mouseup', () => {
-            if (task && groupName !== task.group && is_dragging_y === true) {
+            if (task && is_dragging_y === true) {
                 let groupIndex = null;
 
                 const taskList = this.tasks.filter((t, i) => {
-                    console.log(task.index,i)
                     if (task.index !== i) return t;
                 });
 
@@ -1022,14 +1078,24 @@ export default class Gantt {
                     }
                 });
 
-                groupTask[groupIndex].tasks.splice(index_group + 1, 0, task);
+                groupTask[groupIndex].tasks.splice(index_group, 0, task);
 
                 this.refresh(groupTask);
             }
             is_dragging_y = false;
             if (!bar) return;
             bar.update_bar_group({ y: y_on_start, x: x_on_start });
-            d3.selectAll(`.grid-row `).style('fill', 'white');
+
+            d3
+                .selectAll(`.grid-row `)
+                .nodes()
+                .map(function(e) {
+                    const color =
+                        e.getAttribute('index') % 2 === 0 ? '#fff' : '#f5f5f5';
+                    e.style.fill = color;
+                    return e;
+                });
+
             bar.drag = false;
         });
     }
